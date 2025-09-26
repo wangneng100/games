@@ -6,9 +6,10 @@ import os
 from settings import *
 from player import Player
 from bow import Bow
-from staff import Staff
 from camera import Camera
-from item import SwordItem, BowItem
+from item import BowItem, KnifeItem
+from enemy import Enemy
+from melee import Knife
 
 def main():
     """Main game function."""
@@ -36,19 +37,6 @@ def main():
         dirt_img_path = os.path.join(assets_dir, 'texture', 'dirt.png')
         dirt_img = pygame.image.load(dirt_img_path).convert()
         dirt_img = pygame.transform.scale(dirt_img, (TILE_SIZE, TILE_SIZE))
-        # Load staff image
-        staff_img_path = os.path.join(assets_dir, 'texture', 'sword.png')
-        staff_img = pygame.image.load(staff_img_path).convert_alpha()
-        staff_h = PLAYER_HEIGHT * STAFF_SIZE
-        staff_w = int(staff_img.get_width() * (staff_h / staff_img.get_height()))
-        staff_img = pygame.transform.scale(staff_img, (staff_w, staff_h))
-        avg_color = pygame.transform.average_color(staff_img)
-        gray = (128, 128, 128)
-        avg_color = (
-            (avg_color[0] + gray[0]) // 2,
-            (avg_color[1] + gray[1]) // 2,
-            (avg_color[2] + gray[2]) // 2,
-        )
         
         # Load bow image
         bow_img_path = os.path.join(assets_dir, 'texture', 'bow.png')
@@ -56,6 +44,11 @@ def main():
         bow_h = PLAYER_HEIGHT * BOW_SIZE
         bow_w = int(bow_img.get_width() * (bow_h / bow_img.get_height()))
         bow_img = pygame.transform.scale(bow_img, (bow_w, bow_h))
+        
+        # Load knife image (uses sword.png)
+        knife_img_path = os.path.join(assets_dir, 'texture', 'sword.png')
+        knife_img = pygame.image.load(knife_img_path).convert_alpha()
+        knife_avg_color = pygame.transform.average_color(knife_img)
         
         # Load arrow image
         arrow_img_path = os.path.join(assets_dir, 'texture', 'arrow.png')
@@ -119,18 +112,21 @@ def main():
                 platforms.append(pygame.Rect(x, y, TILE_SIZE, TILE_SIZE))
     print("Level data and platforms created.")
 
-    staff = Staff(staff_img, avg_color)
     bow = Bow(bow_img, arrow_img)
-    player = Player(100, 10 * TILE_SIZE - PLAYER_HEIGHT, player_img, staff, bow)
+    knife = Knife(knife_img, knife_avg_color)
+    player = Player(100, 10 * TILE_SIZE - PLAYER_HEIGHT, player_img, bow, knife)
     
     # Create items and add to hotbar
-    sword_item = SwordItem(staff, staff_img)
     bow_item = BowItem(bow, bow_img)
-    player.hotbar.add_item(sword_item, 0)  # Add sword to slot 1
-    player.hotbar.add_item(bow_item, 1)    # Add bow to slot 2
-    player.hotbar.select_slot(0)  # Start with sword selected
+    knife_item = KnifeItem(knife, knife_img)
+    player.hotbar.add_item(bow_item, 0)    # Add bow to slot 1
+    player.hotbar.add_item(knife_item, 1)  # Add knife to slot 2
+    player.hotbar.select_slot(0)  # Start with bow selected
     
-    print("Staff, Bow, Player, and Hotbar created.")
+    # Create test enemy
+    enemy = Enemy(400, 8 * TILE_SIZE - PLAYER_HEIGHT, player_img)  # Use same image as player
+    
+    print("Bow, Player, Hotbar, and Enemy created.")
     
     camera = Camera(SCREEN_WIDTH, SCREEN_HEIGHT)
     print("Camera created.")
@@ -141,26 +137,44 @@ def main():
     while running:
         jump_pressed = False
         jump_key_released = False
+        dash_pressed = False
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             if event.type == KEYDOWN:
                 if event.key == K_ESCAPE:
                     running = False
-                if event.key == K_SPACE or event.key == K_UP or event.key == K_w:
+                if event.key == K_UP or event.key == K_w:
                     jump_pressed = True
+                if event.key == K_SPACE:
+                    dash_pressed = True
             if event.type == KEYUP:
-                if event.key == K_SPACE or event.key == K_UP or event.key == K_w:
+                if event.key == K_UP or event.key == K_w:
                     jump_key_released = True
             if event.type == MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left click
                     # Check if clicking on hotbar
                     player.handle_hotbar_click(event.pos)
+                elif event.button == 4:  # Mouse wheel up
+                    player.handle_hotbar_scroll(1)
+                elif event.button == 5:  # Mouse wheel down
+                    player.handle_hotbar_scroll(-1)
 
         left_click, _, right_click = pygame.mouse.get_pressed()
         mouse_pos = pygame.mouse.get_pos()
         keys_pressed = pygame.key.get_pressed()
-        player.update(platforms, jump_pressed, left_click, camera, jump_key_released, right_click, keys_pressed, mouse_pos)
+        player.update(platforms, jump_pressed, left_click, camera, jump_key_released, right_click, keys_pressed, mouse_pos, dash_pressed)
+        enemy.update(platforms, player.rect)  # Update enemy AI
+        
+        # Check collisions
+        player.check_enemy_collision(enemy)
+        player.check_arrow_hits(enemy)
+        
+        # Only check knife hits when knife is equipped
+        if player.current_weapon == player.knife:
+            player.check_knife_hit(enemy)
+
+        
         camera.update(player.rect, mouse_pos)
 
         screen.fill(SKY_BLUE)
@@ -168,6 +182,8 @@ def main():
             screen.blit(dirt_img, camera.apply(platform))
         
         player.draw(screen, camera)
+
+        enemy.draw(screen, camera)  # Draw enemy
         player.draw_hotbar(screen)  # Draw hotbar UI
         
         pygame.display.flip()

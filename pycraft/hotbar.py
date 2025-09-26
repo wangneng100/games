@@ -52,6 +52,15 @@ class Hotbar:
                 return True
         return False
     
+    def handle_scroll(self, scroll_direction):
+        """Handle mouse wheel scrolling for hotbar"""
+        if scroll_direction > 0:  # Scroll up
+            new_slot = (self.selected_slot - 1) % HOTBAR_SLOTS
+        else:  # Scroll down
+            new_slot = (self.selected_slot + 1) % HOTBAR_SLOTS
+        self.select_slot(new_slot)
+        return True
+    
     def draw(self, screen):
         """Draw the hotbar on screen"""
         # Create surface with alpha for transparency (horizontal layout)

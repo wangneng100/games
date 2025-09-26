@@ -1,7 +1,7 @@
 import pygame
 import math
 import time
-from settings import BOW_TILT_ANGLE, BOW_OFFSET, BOW_CHARGE_TIME, BOW_SHAKE_INTENSITY, BOW_SHAKE_FREQUENCY
+from settings import BOW_TILT_ANGLE, BOW_OFFSET, BOW_CHARGE_TIME, BOW_SHAKE_INTENSITY, BOW_SHAKE_FREQUENCY, BOW_ARROW_OFFSET, BOW_ARROW_SCALE
 from arrow import Arrow
 
 class Bow:
@@ -15,16 +15,29 @@ class Bow:
         self.charge_power = 0.0  # 0.0 to 1.0
         self.shake_offset_x = 0
         self.shake_offset_y = 0
+        self.is_charging = False  # Track if charging for arrow animation
+        
+        # Create scaled and blue-tinted arrow for bow animation
+        if arrow_image:
+            arrow_h = int(arrow_image.get_height() * BOW_ARROW_SCALE)
+            arrow_w = int(arrow_image.get_width() * BOW_ARROW_SCALE)
+            scaled_arrow = pygame.transform.scale(arrow_image, (arrow_w, arrow_h))
+            # Apply blue tint
+            self.bow_arrow_image = self.apply_blue_tint_to_bow_arrow(scaled_arrow)
+        else:
+            self.bow_arrow_image = None
         
     def update(self, player_rect, right_click, camera, charge_time=0):
         """Update bow position and rotation based on mouse position"""
         self.player_rect = player_rect
         self.is_drawn = right_click
+        self.is_charging = charge_time > 0  # Track if actively charging
         
         if not self.is_drawn:
             self.charge_power = 0.0
             self.shake_offset_x = 0
             self.shake_offset_y = 0
+            self.is_charging = False
             return
         
         # Calculate charge power based on how long right click has been held
@@ -58,9 +71,11 @@ class Bow:
         if not self.player_rect:
             return None
             
-        # Calculate arrow spawn position (slightly offset from player)
-        arrow_x = self.player_rect.centerx + math.cos(self.angle) * BOW_OFFSET
-        arrow_y = self.player_rect.centery + math.sin(self.angle) * BOW_OFFSET
+        # Calculate arrow spawn position at the edge of the character
+        # Use character radius to spawn arrow right outside the player
+        character_radius = max(self.player_rect.width, self.player_rect.height) // 2
+        arrow_x = self.player_rect.centerx + math.cos(self.angle) * character_radius
+        arrow_y = self.player_rect.centery + math.sin(self.angle) * character_radius
         
         return Arrow(arrow_x, arrow_y, self.angle, self.arrow_image, self.charge_power)
         
@@ -71,6 +86,7 @@ class Bow:
         self.charge_power = 0.0
         self.shake_offset_x = 0
         self.shake_offset_y = 0
+        self.is_charging = False
         
     def draw(self, screen, camera):
         """Draw the bow at the player's position (only when drawn)"""
@@ -102,3 +118,38 @@ class Bow:
         
         # Draw the bow
         screen.blit(rotated_bow, bow_rect)
+        
+        # Draw arrow if charging
+        if self.is_charging and self.bow_arrow_image:
+            self.draw_bow_arrow(screen, camera, bow_x, bow_y, angle_degrees, is_flipped)
+            
+    def apply_blue_tint_to_bow_arrow(self, image):
+        """Apply blue tint to the bow arrow"""
+        # Create a surface with blue tint
+        tint_surface = pygame.Surface(image.get_size(), pygame.SRCALPHA)
+        tint_surface.fill((100, 150, 255, 128))  # Blue tint with alpha
+        
+        # Create a copy and blend
+        tinted_image = image.copy()
+        tinted_image.blit(tint_surface, (0, 0), special_flags=pygame.BLEND_MULT)
+        
+        return tinted_image
+        
+    def draw_bow_arrow(self, screen, camera, bow_x, bow_y, angle_degrees, is_flipped):
+        """Draw the arrow being held in the bow"""
+        # Calculate arrow position (pulled back based on charge)
+        pullback_distance = BOW_ARROW_OFFSET * self.charge_power
+        
+        # Position arrow behind the bow center
+        arrow_x = bow_x - math.cos(self.angle) * pullback_distance
+        arrow_y = bow_y - math.sin(self.angle) * pullback_distance
+        
+        # Apply camera transform
+        screen_arrow_pos = camera.apply_point((arrow_x, arrow_y))
+        
+        # Rotate arrow to match bow angle (don't flip the arrow, only rotate)
+        rotated_arrow = pygame.transform.rotate(self.bow_arrow_image, -angle_degrees)  # Match bow direction exactly
+        arrow_rect = rotated_arrow.get_rect(center=screen_arrow_pos)
+        
+        # Draw the arrow
+        screen.blit(rotated_arrow, arrow_rect)

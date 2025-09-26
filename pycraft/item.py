@@ -36,3 +36,22 @@ class BowItem(WeaponItem):
     """Bow weapon item"""
     def __init__(self, bow_obj, image=None):
         super().__init__("Bow", bow_obj, image)
+
+class KnifeItem(WeaponItem):
+    """Knife weapon item"""
+    def __init__(self, knife_obj, image=None):
+        super().__init__("Knife", knife_obj, image)
+    
+    def draw_icon(self, screen, x, y, size):
+        """Draw knife icon 3x smaller but properly oriented in hotbar slot"""
+        if self.image:
+            # Make knife 3x smaller than slot size while maintaining aspect ratio
+            knife_height = int(size * 0.33)  # 1/3 of slot height (3x smaller)
+            knife_width = int(self.image.get_width() * (knife_height / self.image.get_height()))
+            scaled_knife = pygame.transform.scale(self.image, (knife_width, knife_height))
+            
+            # Center the smaller knife in the slot
+            draw_x = x + (size - knife_width) // 2
+            draw_y = y + (size - knife_height) // 2
+            
+            screen.blit(scaled_knife, (draw_x, draw_y))

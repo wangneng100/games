@@ -1,6 +1,6 @@
 import pygame
 import math
-from settings import ARROW_BASE_SPEED, ARROW_MAX_SPEED, ARROW_GRAVITY, ARROW_BLUE_TINT, ARROW_TRAIL_COLOR
+from settings import ARROW_BASE_SPEED, ARROW_MAX_SPEED, ARROW_GRAVITY, ARROW_BLUE_TINT, ARROW_TRAIL_COLOR, ARROW_PIERCE_COUNT, ARROW_PARTICLE_COLOR, PARTICLE_COUNT
 from trail import Trail
 
 class Arrow:
@@ -18,10 +18,12 @@ class Arrow:
         self.vel_y = math.sin(angle) * arrow_speed
         self.angle = angle
         self.alive = True
+        self.blocks_pierced = 0  # Track how many blocks have been pierced
         
         # Trail effect
         self.trail = Trail(ARROW_TRAIL_COLOR)
         self.trail.add_position(x, y)  # Add initial position
+        self.particle_system = None  # Will be set by player
         
     def apply_blue_tint(self, image):
         """Apply a blue tint to the arrow image"""
@@ -54,11 +56,29 @@ class Arrow:
         # Add current position to trail (use center of arrow)
         self.trail.add_position(self.rect.centerx, self.rect.centery)
         
-        # Check collision with platforms
+        # Check collision with platforms (with piercing)
         for platform in platforms:
             if self.rect.colliderect(platform):
-                self.alive = False
-                break
+                if self.blocks_pierced < ARROW_PIERCE_COUNT:
+                    self.blocks_pierced += 1
+                    # Reduce speed when piercing
+                    self.vel_x *= 0.7
+                    self.vel_y *= 0.7
+                    # Create small particle effect when piercing
+                    if hasattr(self, 'particle_system'):
+                        self.particle_system.create_explosion(
+                            self.rect.centerx, self.rect.centery, 
+                            ARROW_PARTICLE_COLOR, count=4
+                        )
+                else:
+                    # Create particle explosion when arrow dies
+                    if hasattr(self, 'particle_system'):
+                        self.particle_system.create_explosion(
+                            self.rect.centerx, self.rect.centery, 
+                            ARROW_PARTICLE_COLOR, count=PARTICLE_COUNT
+                        )
+                    self.alive = False
+                    break
                 
         # Remove arrow if it goes way off screen (very generous boundaries)
         # This prevents arrows from existing forever but allows for large world coordinates
