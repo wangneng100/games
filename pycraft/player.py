@@ -1,10 +1,12 @@
 import pygame
 import math
+import time
 from settings import *
+from hotbar import Hotbar
 
 class Player:
     """Represents the player character."""
-    def __init__(self, x, y, image, staff):
+    def __init__(self, x, y, image, staff, bow):
         self.original_image = image
         self.image = image
         self.rect = self.image.get_rect(topleft=(x, y))
@@ -15,8 +17,18 @@ class Player:
         self.angle = 0
         self.jumps_left = 2
         self.staff = staff
+        self.bow = bow
+        self.arrows = []  # List to store active arrows
         self.spawn_x = x
         self.spawn_y = y
+        self.right_click_held = False
+        self.right_click_released = False
+        self.right_click_start_time = 0
+        self.charge_time = 0
+        
+        # Hotbar system
+        self.hotbar = Hotbar()
+        self.current_weapon = None  # Currently equipped weapon
 
     def reset(self):
         self.rect.topleft = (self.spawn_x, self.spawn_y)
@@ -26,9 +38,59 @@ class Player:
         self.on_ground = False
         self.jumps_left = 2
         self.staff.reset()
+        self.bow.reset()
+        self.arrows.clear()
+        self.right_click_held = False
+        self.right_click_released = False
+        self.right_click_start_time = 0
+        self.charge_time = 0
+        self.current_weapon = None
 
-    def update(self, platforms, jump_pressed, left_click, camera, jump_key_released):
+    def update(self, platforms, jump_pressed, left_click, camera, jump_key_released, right_click, keys_pressed=None, mouse_pos=None):
         """Handles player movement, gravity, and collision."""
+
+        # --- Handle hotbar input ---
+        if keys_pressed:
+            self.hotbar.handle_key_input(keys_pressed)
+        
+        # Update current weapon based on selected hotbar slot
+        selected_item = self.hotbar.get_selected_item()
+        if selected_item and hasattr(selected_item, 'weapon'):
+            self.current_weapon = selected_item.weapon
+        else:
+            self.current_weapon = None
+
+        # --- Handle weapon attacks based on current weapon ---
+        current_time = time.time()
+        
+        # Only handle bow mechanics when bow is equipped
+        if self.current_weapon == self.bow:
+            if right_click and not self.right_click_held:
+                # Just started holding right click
+                self.right_click_held = True
+                self.right_click_released = False
+                self.right_click_start_time = current_time
+                self.charge_time = 0
+            elif right_click and self.right_click_held:
+                # Continue holding right click - update charge time
+                self.charge_time = current_time - self.right_click_start_time
+                self.right_click_released = False
+            elif not right_click and self.right_click_held:
+                # Just released right click - shoot arrow
+                self.right_click_held = False
+                self.right_click_released = True
+                arrow = self.bow.shoot_arrow()
+                if arrow:
+                    self.arrows.append(arrow)
+                self.charge_time = 0
+            else:
+                self.right_click_released = False
+                self.charge_time = 0
+        else:
+            # Reset bow states when not equipped
+            self.right_click_held = False
+            self.right_click_released = False
+            self.charge_time = 0
 
         # --- Get Keyboard Input ---
         keys = pygame.key.get_pressed()
@@ -99,6 +161,7 @@ class Player:
                     self.angle = 0
                     self.jumps_left = 2
                     self.staff.reset()
+                    self.bow.reset()
                 elif self.vel_y < 0:  # Moving up
                     self.rect.top = platform.bottom
                     self.vel_y = 0
@@ -113,18 +176,45 @@ class Player:
         if self.rect.top > SCREEN_HEIGHT:
             self.reset()
 
-
-
-        player_vel = pygame.math.Vector2(self.vel_x, self.vel_y)
-        self.staff.update(self.rect, left_click, platforms, camera, player_vel)
+        # Update current weapon based on what's equipped
+        if self.current_weapon == self.bow:
+            # Update bow when bow is equipped (always show, charge when right click held)
+            self.bow.update(self.rect, True, camera, self.charge_time if self.right_click_held else 0)
+        elif self.current_weapon == self.staff:
+            # Update staff when staff is equipped
+            player_vel = pygame.math.Vector2(self.vel_x, self.vel_y)
+            self.staff.update(self.rect, left_click, platforms, camera, player_vel)
+        
+        # Update arrows
+        self.arrows = [arrow for arrow in self.arrows if arrow.alive]
+        for arrow in self.arrows:
+            arrow.update(platforms)
 
 
 
     def draw(self, screen, camera):
         """Draws the player on the screen."""
 
-
         rotated_image = pygame.transform.rotate(self.original_image, self.angle)
         new_rect = rotated_image.get_rect(center = self.rect.center)
         screen.blit(rotated_image, camera.apply(new_rect))
-        self.staff.draw(screen, camera)
+        
+        # Draw current weapon based on what's equipped
+        if self.current_weapon == self.bow:
+            # Draw bow when equipped (always visible)
+            self.bow.draw(screen, camera)
+        elif self.current_weapon == self.staff:
+            # Draw staff when equipped
+            self.staff.draw(screen, camera)
+        
+        # Draw arrows
+        for arrow in self.arrows:
+            arrow.draw(screen, camera)
+            
+    def handle_hotbar_click(self, mouse_pos):
+        """Handle mouse clicks on hotbar"""
+        return self.hotbar.handle_mouse_click(mouse_pos)
+        
+    def draw_hotbar(self, screen):
+        """Draw the hotbar UI"""
+        self.hotbar.draw(screen)

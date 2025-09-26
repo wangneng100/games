@@ -5,8 +5,10 @@ import os
 
 from settings import *
 from player import Player
+from bow import Bow
 from staff import Staff
 from camera import Camera
+from item import SwordItem, BowItem
 
 def main():
     """Main game function."""
@@ -34,9 +36,10 @@ def main():
         dirt_img_path = os.path.join(assets_dir, 'texture', 'dirt.png')
         dirt_img = pygame.image.load(dirt_img_path).convert()
         dirt_img = pygame.transform.scale(dirt_img, (TILE_SIZE, TILE_SIZE))
-        staff_img_path = os.path.join(assets_dir, 'texture', 'staff.png')
+        # Load staff image
+        staff_img_path = os.path.join(assets_dir, 'texture', 'sword.png')
         staff_img = pygame.image.load(staff_img_path).convert_alpha()
-        staff_h = PLAYER_HEIGHT * 3.5
+        staff_h = PLAYER_HEIGHT * STAFF_SIZE
         staff_w = int(staff_img.get_width() * (staff_h / staff_img.get_height()))
         staff_img = pygame.transform.scale(staff_img, (staff_w, staff_h))
         avg_color = pygame.transform.average_color(staff_img)
@@ -46,10 +49,24 @@ def main():
             (avg_color[1] + gray[1]) // 2,
             (avg_color[2] + gray[2]) // 2,
         )
+        
+        # Load bow image
+        bow_img_path = os.path.join(assets_dir, 'texture', 'bow.png')
+        bow_img = pygame.image.load(bow_img_path).convert_alpha()
+        bow_h = PLAYER_HEIGHT * BOW_SIZE
+        bow_w = int(bow_img.get_width() * (bow_h / bow_img.get_height()))
+        bow_img = pygame.transform.scale(bow_img, (bow_w, bow_h))
+        
+        # Load arrow image
+        arrow_img_path = os.path.join(assets_dir, 'texture', 'arrow.png')
+        arrow_img = pygame.image.load(arrow_img_path).convert_alpha()
+        arrow_h = PLAYER_HEIGHT * ARROW_SIZE
+        arrow_w = int(arrow_img.get_width() * (arrow_h / arrow_img.get_height()))
+        arrow_img = pygame.transform.scale(arrow_img, (arrow_w, arrow_h))
         print("Images loaded successfully.")
     except pygame.error as e:
         print(f"Unable to load image: {e}")
-        print("\nMake sure you have an 'assets/texture' folder with 'player.png' and 'dirt.png' inside.")
+        print("\nMake sure you have an 'assets/texture' folder with required images inside.")
         pygame.quit()
         sys.exit()
 
@@ -65,6 +82,15 @@ def main():
         print("Cursor loaded and set.")
     except pygame.error as e:
         print(f"Unable to load cursor image: {e}")
+
+    # --- Load Sound ---
+    try:
+        bgm_path = os.path.join(assets_dir, 'sound', 'bgm.mp3')
+        pygame.mixer.music.load(bgm_path)
+        pygame.mixer.music.play(-1)  # Play on loop
+        print("BGM loaded and playing.")
+    except pygame.error as e:
+        print(f"Unable to load or play BGM: {e}")
 
     # --- Level Data ---
     # X = Ground Block
@@ -94,8 +120,17 @@ def main():
     print("Level data and platforms created.")
 
     staff = Staff(staff_img, avg_color)
-    player = Player(100, 10 * TILE_SIZE - PLAYER_HEIGHT, player_img, staff)
-    print("Staff and Player created.")
+    bow = Bow(bow_img, arrow_img)
+    player = Player(100, 10 * TILE_SIZE - PLAYER_HEIGHT, player_img, staff, bow)
+    
+    # Create items and add to hotbar
+    sword_item = SwordItem(staff, staff_img)
+    bow_item = BowItem(bow, bow_img)
+    player.hotbar.add_item(sword_item, 0)  # Add sword to slot 1
+    player.hotbar.add_item(bow_item, 1)    # Add bow to slot 2
+    player.hotbar.select_slot(0)  # Start with sword selected
+    
+    print("Staff, Bow, Player, and Hotbar created.")
     
     camera = Camera(SCREEN_WIDTH, SCREEN_HEIGHT)
     print("Camera created.")
@@ -117,10 +152,15 @@ def main():
             if event.type == KEYUP:
                 if event.key == K_SPACE or event.key == K_UP or event.key == K_w:
                     jump_key_released = True
+            if event.type == MOUSEBUTTONDOWN:
+                if event.button == 1:  # Left click
+                    # Check if clicking on hotbar
+                    player.handle_hotbar_click(event.pos)
 
-        left_click, _, _ = pygame.mouse.get_pressed()
+        left_click, _, right_click = pygame.mouse.get_pressed()
         mouse_pos = pygame.mouse.get_pos()
-        player.update(platforms, jump_pressed, left_click, camera, jump_key_released)
+        keys_pressed = pygame.key.get_pressed()
+        player.update(platforms, jump_pressed, left_click, camera, jump_key_released, right_click, keys_pressed, mouse_pos)
         camera.update(player.rect, mouse_pos)
 
         screen.fill(SKY_BLUE)
@@ -128,6 +168,7 @@ def main():
             screen.blit(dirt_img, camera.apply(platform))
         
         player.draw(screen, camera)
+        player.draw_hotbar(screen)  # Draw hotbar UI
         
         pygame.display.flip()
         clock.tick(FPS)
