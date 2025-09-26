@@ -34,22 +34,27 @@ class Staff:
         if not self.player_rect:
             return
         
-        # Calculate staff position relative to player
-        staff_offset = 40  # Distance from player center
-        staff_x = self.player_rect.centerx + math.cos(self.angle) * staff_offset
-        staff_y = self.player_rect.centery + math.sin(self.angle) * staff_offset
+        # Position staff directly at player center
+        staff_x = self.player_rect.centerx
+        staff_y = self.player_rect.centery
         
         # Apply camera transform to get screen position
         screen_pos = camera.apply_point((staff_x, staff_y))
         
-        # Determine if we need to flip the image
+        # Determine if we need to flip the image and add rotation offset
         is_flipped = False
-        if abs(math.degrees(self.angle)) < 90:
+        rotation_offset = 0
+        angle_degrees = math.degrees(self.angle)
+        
+        if abs(angle_degrees) < 90:  # Right side
             is_flipped = True
+            rotation_offset = 45  # 45 degrees right
+        else:  # Left side
+            rotation_offset = -45  # 45 degrees left
 
-        # Rotate staff image to point toward mouse
+        # Rotate staff image to point toward mouse with additional offset
         image_to_rotate = pygame.transform.flip(self.image, is_flipped, False)
-        rotated_staff = pygame.transform.rotate(image_to_rotate, -math.degrees(self.angle) - 90)
+        rotated_staff = pygame.transform.rotate(image_to_rotate, -angle_degrees - 90 + rotation_offset)
         staff_rect = rotated_staff.get_rect(center=screen_pos)
         
         # Draw the staff
