@@ -7,9 +7,8 @@ from settings import *
 from player import Player
 from bow import Bow
 from camera import Camera
-from item import BowItem, KnifeItem
-from enemy import Enemy
-from melee import Knife
+from item import BowItem
+from dummy_enemy import Enemy
 from particle import ParticleSystem
 
 def main():
@@ -46,10 +45,7 @@ def main():
         bow_w = int(bow_img.get_width() * (bow_h / bow_img.get_height()))
         bow_img = pygame.transform.scale(bow_img, (bow_w, bow_h))
         
-        # Load knife image (uses sword.png)
-        knife_img_path = os.path.join(assets_dir, 'texture', 'sword.png')
-        knife_img = pygame.image.load(knife_img_path).convert_alpha()
-        knife_avg_color = pygame.transform.average_color(knife_img)
+
         
         # Load arrow image
         arrow_img_path = os.path.join(assets_dir, 'texture', 'arrow.png')
@@ -57,6 +53,13 @@ def main():
         arrow_h = PLAYER_HEIGHT * ARROW_SIZE
         arrow_w = int(arrow_img.get_width() * (arrow_h / arrow_img.get_height()))
         arrow_img = pygame.transform.scale(arrow_img, (arrow_w, arrow_h))
+        
+        # Load staff image for enemy
+        staff_img_path = os.path.join(assets_dir, 'texture', 'staff.png')
+        staff_img = pygame.image.load(staff_img_path).convert_alpha()
+        staff_h = PLAYER_HEIGHT * 2  # Make staff bigger than player
+        staff_w = int(staff_img.get_width() * (staff_h / staff_img.get_height()))
+        staff_img = pygame.transform.scale(staff_img, (staff_w, staff_h))
         print("Images loaded successfully.")
     except pygame.error as e:
         print(f"Unable to load image: {e}")
@@ -114,21 +117,18 @@ def main():
     print("Level data and platforms created.")
 
     bow = Bow(bow_img, arrow_img)
-    knife = Knife(knife_img, knife_avg_color)
-    player = Player(100, 10 * TILE_SIZE - PLAYER_HEIGHT, player_img, bow, knife)
+    player = Player(100, 10 * TILE_SIZE - PLAYER_HEIGHT, player_img, bow)
     
     # Create items and add to hotbar
     bow_item = BowItem(bow, bow_img)
-    knife_item = KnifeItem(knife, knife_img)
     player.hotbar.add_item(bow_item, 0)    # Add bow to slot 1
-    player.hotbar.add_item(knife_item, 1)  # Add knife to slot 2
     player.hotbar.select_slot(0)  # Start with bow selected
     
     # Create particle system
     particle_system = ParticleSystem()
     
-    # Create test enemy (no bow needed)
-    enemy = Enemy(400, 8 * TILE_SIZE - PLAYER_HEIGHT, player_img)
+    # Create test enemy with bow weapon
+    enemy = Enemy(400, 8 * TILE_SIZE - PLAYER_HEIGHT, player_img, bow_img)
     enemy.particle_system = particle_system  # Connect particle system to enemy
     player.enemy_target = enemy  # Give player reference to enemy for aimbot assist
     
@@ -177,52 +177,44 @@ def main():
         mouse_pos = pygame.mouse.get_pos()
         keys_pressed = pygame.key.get_pressed()
         player.update(platforms, jump_pressed, left_click, camera, jump_key_released, right_click, keys_pressed, mouse_pos, dash_pressed)
-        enemy.update(platforms, player)  # Update enemy AI with full player object
+        enemy.update(platforms, player, particle_system)  # Update enemy AI with particle system
         particle_system.update()  # Update particles
+        
+        # Dummy enemy doesn't shoot arrows
+        # (Boss arrow code removed for dummy)
         
         # Check collisions
         player.check_enemy_collision(enemy)
         player.check_arrow_hits(enemy)
         
-        # Check if enemy cross attack hits player when cross is small
-        if enemy.check_circle_hit(player.rect):
-            player.take_damage(20)  # Clear damage indication (20 out of 100 HP)
-            print(f"Enemy cross hit! Player health: {player.health_tank.current_health}")  # Debug
+        # Staff attacks now create particle explosions instead of direct damage
         
         # Check if particles hit player
         particle_damage = particle_system.check_player_collisions(player.rect)
         if particle_damage > 0:
             player.take_damage(particle_damage)
-            print(f"Particle hit! Damage: {particle_damage}, Player health: {player.health_tank.current_health}")
+            print(f"Particle hit! Damage: {particle_damage}, Player health: {player.health_bar.current_health}")
         
         # Check if lightning strike hits player
         if enemy.check_lightning_hit(player.rect):
             player.take_damage(25)  # Lightning damage
-            print(f"Lightning strike hit! Player health: {player.health_tank.current_health}")
+            print(f"Lightning strike hit! Player health: {player.health_bar.current_health}")
         
-        # Only check knife hits when knife is equipped
-        if player.current_weapon == player.knife:
-            player.check_knife_hit(enemy)
+
 
         
         camera.update(player.rect, mouse_pos)
 
         screen.fill(SKY_BLUE)
-        
-        # Add bullet time visual effects during flurry rush
-        if player.flurry_rush_active:
-            # Create bullet time tint overlay
-            bullet_time_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-            bullet_time_surface.set_alpha(50)
-            bullet_time_surface.fill((150, 150, 255))  # Blue tint
-            screen.blit(bullet_time_surface, (0, 0))
-        
         for platform in platforms:
             screen.blit(dirt_img, camera.apply(platform))
         
         player.draw(screen, camera)
 
-        enemy.draw(screen, camera)  # Draw enemy
+        enemy.draw(screen, camera, player)  # Draw enemy with player reference for bow aiming
+        
+        # Dummy enemy has no arrows to draw
+        
         particle_system.draw(screen, camera)  # Draw particles
         
         # Draw boss health bar (not affected by camera)

@@ -26,17 +26,7 @@ BOW_SIZE = 2.5
 BOW_OFFSET = 50
 BOW_TILT_ANGLE = -45
 
-# Knife settings
-KNIFE_SCALE = 0.06  # Even tinier knife
-KNIFE_OFFSET = 12  # Very close to player
-KNIFE_STAB_EXTENSION = 24  # Extension during stab (3x)
-KNIFE_STAB_DURATION = 0.2  # Total stab duration
-KNIFE_STAB_FORWARD_RATIO = 1/6  # Quick forward (1 part of 6 total)
-KNIFE_STAB_RETURN_RATIO = 5/6   # Slow return (5 parts of 6 total)
-KNIFE_ATTACK_COOLDOWN = 0  # Attack cooldown (4.4 clicks per second)
-KNIFE_HITBOX_SIZE = 6  # Smaller hitbox
-KNIFE_DAMAGE_MULTIPLIER = 1.5  # Decent damage for melee
-KNIFE_RIGHT_CLICK_MULTIPLIER = 1.2  # Right click does 1x damage/knockback
+
 
 # Arrow settings
 ARROW_BASE_SPEED = 8  # Minimum arrow speed
@@ -75,11 +65,11 @@ HEALTH_TANK_X = 20  # Same X as hotbar
 HEALTH_TANK_Y = 80  # Below hotbar (hotbar height + padding)
 HEALTH_TANK_BORDER_COLOR = (100, 100, 100)  # Gray border
 HEALTH_TANK_BACKGROUND_COLOR = (40, 40, 40)  # Dark background
-HEALTH_BLOOD_COLOR = (180, 0, 0)  # Blood red
+HEALTH_BLOOD_COLOR = (30, 179, 38)  # Blood red
 HEALTH_VOID_COLOR = (255, 255, 255)  # White for void damage
-HEALTH_DRAIN_SPEED = 50.0  # How fast blood drains when damaged (almost instant)
-HEALTH_FLUID_GRAVITY = 20.0  # How fast fluid settles (almost instant)
-HEALTH_FLUID_VISCOSITY = 0.05  # Very low viscosity for instant flow
+HEALTH_DRAIN_SPEED = 1000.0  # How fast blood drains when damaged (20x faster)
+HEALTH_FLUID_GRAVITY = 400.0  # How fast fluid settles (20x faster)
+HEALTH_FLUID_VISCOSITY = 0.015  # Even lower viscosity for instant flow (20x faster)
 HOTBAR_KEYS = [pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5, pygame.K_6, 
                pygame.K_7, pygame.K_8, pygame.K_9, pygame.K_0, pygame.K_MINUS, pygame.K_EQUALS]
 
@@ -123,34 +113,22 @@ DASH_KEY = pygame.K_SPACE  # Space key for dash
 ENEMY_ATTACK_COOLDOWN = 1.5  # Seconds between enemy attacks
 ENEMY_ATTACK_RANGE = 80  # How close enemy needs to be to attack
 ENEMY_ATTACK_KNOCKBACK_FORCE = 6  # Force of enemy attacks
-ENEMY_KNIFE_SCALE = 0.18  # 3x bigger than player knife (0.06 * 3)
-ENEMY_KNIFE_DAMAGE = 25  # Massive damage per hit
-ENEMY_KNIFE_REACH = 60  # Long reach for large knife
-ENEMY_KNIFE_SPEED = 0.5  # Attack animation speed (slice duration)
-ENEMY_KNIFE_WINDUP_TIME = 0.8  # Blue glow warning time before slice
-ENEMY_KNIFE_SLICE_ARC = 120  # Degrees of slice arc
+ENEMY_STAFF_SCALE = 3.0  # 3x bigger staff for dramatic attacks
+ENEMY_STAFF_DAMAGE = 20  # Staff damage per hit
+ENEMY_STAFF_REACH = 100  # Long reach for large staff
+ENEMY_STAFF_SPIN_SPEED = 20  # Degrees per frame during spin
+ENEMY_STAFF_CHARGE_TIME = 0.5  # Time to charge back before stab
+ENEMY_STAFF_STAB_SPEED = 12  # Speed of forward dash during stab
+ENEMY_STAFF_JUMP_FORCE = -8  # Upward force when jumping back
+ENEMY_STAFF_BACK_SPEED = 15  # Horizontal speed when jumping back
+ENEMY_STAFF_ROTATION_OFFSET = -45  # Default rotation offset (45 degrees to the left)
+ENEMY_ROTATIONAL_OFFSET = -45  # Additional rotational offset for weapon facing
 ENEMY_GLOW_COLOR = (100, 150, 255)  # Blue glow color
 
 # Improved collision settings
 COLLISION_SUBSTEPS = 1  # Reduced for performance - single step collision
 WALL_PENETRATION_THRESHOLD = 3  # Slightly more tolerant for smoother movement
 PLAYER_KNOCKBACK_DISABLED = True  # Disable player knockback for better feel
-
-# Flurry Rush settings
-FLURRY_RUSH_DURATION = 30  # Bullet time lasts 12 seconds
-FLURRY_RUSH_TIME_SCALE = 0.1  # Slow motion effect - everything moves at 30% speed
-FLURRY_RUSH_DAMAGE_MULTIPLIER = 10  # 10x damage during flurry rush
-FLURRY_RUSH_TRIGGER_WINDOW = 0.5  # Time window to dash during enemy melee attack
-FLURRY_RUSH_COOLDOWN = 1  # Cooldown between flurry rushes
-
-# Enemy dodge settings
-ENEMY_DODGE_CHANCE = 0.8  # 80% chance to dodge normal attacks
-ENEMY_DODGE_DETECTION_RANGE = 120  # Distance at which enemy starts dodging
-ENEMY_DODGE_SPEED = 24  # Speed of dodge movement
-
-# Visual effects
-BULLET_TIME_TINT = (150, 150, 255, 50)  # Blue tint during bullet time
-FLURRY_RUSH_FLASH_COLOR = (255, 255, 100)  # Yellow flash when entering flurry rush
 
 # World settings
 TILE_SIZE = 40

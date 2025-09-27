@@ -6,7 +6,7 @@ from trail import Trail
 class Arrow:
     def __init__(self, x, y, angle, image, power=1.0):
         self.original_image = image
-        # Apply blue tint to the arrow
+        # Apply blue tint to the arrow (can be overridden)
         self.image = self.apply_blue_tint(image.copy())
         self.rect = self.image.get_rect(center=(x, y))
         
@@ -20,6 +20,11 @@ class Arrow:
         self.alive = True
         self.blocks_pierced = 0  # Track how many blocks have been pierced
         self.charge_power = power  # Store charge power for damage calculation
+        
+        # Enemy arrow properties
+        self.color = None  # Custom color for enemy arrows
+        self.damage = 15  # Default damage
+        self.is_enemy_arrow = False
         
         # Trail effect
         self.trail = Trail(ARROW_TRAIL_COLOR)
@@ -38,6 +43,17 @@ class Arrow:
         tinted_image.blit(tint_surface, (0, 0), special_flags=pygame.BLEND_MULT)
         
         return tinted_image
+        
+    def set_color(self, color):
+        """Set custom color for enemy arrows"""
+        self.color = color
+        if color:
+            # Apply custom color tint
+            tint_surface = pygame.Surface(self.original_image.get_size(), pygame.SRCALPHA)
+            tint_surface.fill(color + (128,))  # Add alpha for blending
+            
+            self.image = self.original_image.copy()
+            self.image.blit(tint_surface, (0, 0), special_flags=pygame.BLEND_MULT)
         
     def update(self, platforms):
         """Update arrow physics and collision"""
