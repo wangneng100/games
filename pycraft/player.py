@@ -19,11 +19,23 @@ class Player:
         self.jumps_left = 2
         self.bow = bow
         self.knife = knife
-        self.arrows = []  # List to store active arrows
+        # Initialize arrow list for tracking
+        self.arrows = []
+        
+        # Initialize health tank
+        from health_tank import HealthTank
+        self.health_tank = HealthTank(max_health=100)
         self.spawn_x = x
         self.spawn_y = y
         self.right_click_held = False
         self.right_click_released = False
+        
+        # Damage flash effect
+        self.damage_flash_time = 0
+        self.is_damage_flashing = False
+        
+        # Enemy reference for aimbot assist
+        self.enemy_target = None
         self.right_click_start_time = 0
         self.charge_time = 0
         
@@ -44,6 +56,12 @@ class Player:
         self.dash_trail = Trail(DASH_TRAIL_COLOR, max_length=DASH_TRAIL_LENGTH)
         self.dash_speed = 0  # Current dash speed
         self.dash_roll_angle = 0  # Roll animation angle
+        
+        # Flurry Rush system
+        self.flurry_rush_active = False
+        self.flurry_rush_start_time = 0
+        self.flurry_rush_cooldown_start = 0
+        self.last_enemy_melee_time = 0  # Track when enemy last did melee attack
         
         # Knockback system with variable speed
         self.knockback_vel_x = 0
@@ -73,12 +91,27 @@ class Player:
         self.dash_trail.clear()
         self.dash_speed = 0
         self.dash_roll_angle = 0
+        
+        # Reset flurry rush
+        self.flurry_rush_active = False
+        self.flurry_rush_start_time = 0
+        self.flurry_rush_cooldown_start = 0
+        self.last_enemy_melee_time = 0
+        
+        # Reset health tank
+        self.health_tank.reset()
 
     def update(self, platforms, jump_pressed, left_click, camera, jump_key_released, right_click, keys_pressed=None, mouse_pos=None, dash_pressed=False):
         """Handles player movement, gravity, and collision."""
 
         # Get current time at the beginning
         current_time = time.time()
+        
+        # Handle damage flash effect
+        if self.is_damage_flashing:
+            self.damage_flash_time -= 1/60  # Assuming 60 FPS
+            if self.damage_flash_time <= 0:
+                self.is_damage_flashing = False
 
         # --- Handle hotbar input ---
         if keys_pressed:
@@ -95,6 +128,15 @@ class Player:
         if dash_pressed and not self.is_dashing:
             # Check if dash is off cooldown
             if current_time - self.dash_cooldown_start >= DASH_COOLDOWN:
+                # Check for flurry rush trigger (dash during enemy melee attack)
+                if (self.enemy_target and 
+                    hasattr(self.enemy_target, 'attack_state') and 
+                    self.enemy_target.attack_state == 'charging' and
+                    current_time - self.flurry_rush_cooldown_start >= FLURRY_RUSH_COOLDOWN):
+                    
+                    # Trigger flurry rush!
+                    self.trigger_flurry_rush(current_time)
+                    
                 self.start_dash(keys_pressed)
                 
         # Update dash state
@@ -104,6 +146,11 @@ class Player:
             else:
                 # Add position to dash trail
                 self.dash_trail.add_position(self.rect.centerx, self.rect.centery)
+                
+        # Update flurry rush state
+        if self.flurry_rush_active:
+            if current_time - self.flurry_rush_start_time >= FLURRY_RUSH_DURATION:
+                self.flurry_rush_active = False
 
         # --- Handle weapon attacks based on current weapon ---
         
@@ -123,7 +170,7 @@ class Player:
                 # Just released right click - shoot arrow
                 self.right_click_held = False
                 self.right_click_released = True
-                arrow = self.bow.shoot_arrow()
+                arrow = self.bow.shoot_arrow(self.enemy_target)  # Pass enemy for aimbot assist
                 if arrow:
                     arrow.particle_system = self.particle_system  # Give arrow access to particle system
                     self.arrows.append(arrow)
@@ -247,7 +294,8 @@ class Player:
         self.angle += diff * 0.1
         
         if self.rect.top > SCREEN_HEIGHT:
-            self.reset()
+            # Take void damage when falling out of world
+            self.take_damage(100, is_void=True)
 
         # Update current weapon based on hotbar selection
         selected_item = self.hotbar.get_selected_item()
@@ -271,6 +319,13 @@ class Player:
             
         # Update particle system
         self.particle_system.update()
+        
+        # Update health tank
+        self.health_tank.update()
+        
+        # Continuous death check
+        if self.health_tank.current_health <= 0:
+            self.reset()
             
     def start_dash(self, keys_pressed):
         """Start a dash in the direction of movement keys"""
@@ -322,7 +377,20 @@ class Player:
             
         rotated_image = pygame.transform.rotate(self.original_image, player_angle)
         new_rect = rotated_image.get_rect(center = self.rect.center)
-        screen.blit(rotated_image, camera.apply(new_rect))
+        
+        # Apply red flash effect when taking damage
+        if self.is_damage_flashing:
+            # Create red-tinted version
+            flash_surface = pygame.Surface(rotated_image.get_size(), pygame.SRCALPHA)
+            flash_surface.fill((255, 0, 0, 128))  # Semi-transparent red
+            
+            # Create flashed image
+            flashed_image = rotated_image.copy()
+            flashed_image.blit(flash_surface, (0, 0), special_flags=pygame.BLEND_MULT)
+            
+            screen.blit(flashed_image, camera.apply(new_rect))
+        else:
+            screen.blit(rotated_image, camera.apply(new_rect))
         
         # Draw current equipped weapon
         if self.current_weapon == self.bow:
@@ -340,6 +408,9 @@ class Player:
             
         # Draw particles
         self.particle_system.draw(screen, camera)
+        
+        # Draw health tank (UI element - not affected by camera)
+        self.health_tank.draw(screen)
             
     def handle_hotbar_click(self, mouse_pos):
         """Handle mouse clicks on hotbar"""
@@ -406,6 +477,16 @@ class Player:
                     # Apply knockback to enemy (works even if already knocked back)
                     enemy.apply_knockback(dx, dy, 0.8)
                     
+                    # Damage enemy based on arrow charge power (100x weaker than original)
+                    base_damage = 0.15  # Base damage (was 1.5, originally 15)
+                    charge_bonus = 0.35 * arrow.charge_power  # 0-0.35 bonus damage based on charge (was 0-3.5, originally 0-35)
+                    total_damage = (base_damage + charge_bonus) * self.get_damage_multiplier()  # Apply flurry rush multiplier
+                    enemy.take_damage(total_damage)
+                    
+                    # Heal player for hitting enemy
+                    self.heal(10)  # Gain 10 HP per arrow hit
+                    print(f"Arrow hit! +10 HP. Health: {self.health_tank.current_health}")
+                    
                     # Remove arrow
                     arrow.alive = False
         
@@ -423,8 +504,45 @@ class Player:
             force = BASE_KNOCKBACK_FORCE * KNIFE_DAMAGE_MULTIPLIER * self.knife.attack_strength
             enemy.apply_knockback(dx * force, dy * force, 0.6)
             
+            # Damage enemy (100x weaker)
+            knife_damage = 0.15 * self.knife.attack_strength * self.get_damage_multiplier()  # Apply flurry rush multiplier
+            enemy.take_damage(knife_damage)
+            
+            # Heal player for hitting enemy
+            self.heal(1)  # Gain 1 HP per knife hit
+            print(f"Knife hit! +1 HP. Health: {self.health_tank.current_health}")
+            
             return True
         return False
+    
+    def take_damage(self, damage, is_void=False):
+        """Take damage and update health tank"""
+        self.health_tank.take_damage(damage, is_void)
+        
+        # Trigger damage flash effect
+        self.damage_flash_time = 0.3  # Flash for 0.3 seconds
+        self.is_damage_flashing = True
+        
+        # Always check if dead after taking damage
+        if self.health_tank.current_health <= 0:
+            self.reset()  # Reset player when dead
+    
+    def trigger_flurry_rush(self, current_time):
+        """Trigger flurry rush mode with bullet time and enhanced damage"""
+        self.flurry_rush_active = True
+        self.flurry_rush_start_time = current_time
+        self.flurry_rush_cooldown_start = current_time
+        print("FLURRY RUSH ACTIVATED! 10x damage for 3 seconds!")
+    
+    def get_damage_multiplier(self):
+        """Get current damage multiplier (10x during flurry rush)"""
+        if self.flurry_rush_active:
+            return FLURRY_RUSH_DAMAGE_MULTIPLIER
+        return 1.0
+    
+    def heal(self, amount):
+        """Heal player"""
+        self.health_tank.heal(amount)
     
     def draw_hotbar(self, screen):
         """Draw the hotbar UI"""

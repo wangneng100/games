@@ -19,6 +19,7 @@ class Arrow:
         self.angle = angle
         self.alive = True
         self.blocks_pierced = 0  # Track how many blocks have been pierced
+        self.charge_power = power  # Store charge power for damage calculation
         
         # Trail effect
         self.trail = Trail(ARROW_TRAIL_COLOR)

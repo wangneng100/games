@@ -10,6 +10,7 @@ from camera import Camera
 from item import BowItem, KnifeItem
 from enemy import Enemy
 from melee import Knife
+from particle import ParticleSystem
 
 def main():
     """Main game function."""
@@ -86,21 +87,21 @@ def main():
         print(f"Unable to load or play BGM: {e}")
 
     # --- Level Data ---
-    # X = Ground Block
+    # X = Ground Block - Flat map for easier combat
     level_map = [
         "                                                                                ",
         "                                                                                ",
         "                                                                                ",
-        "       XXXXX                                       XXXXX                        ",
         "                                                                                ",
-        "   XX               XX                          XXXXXX                          ",
         "                                                                                ",
-        "               XXXX                       XXXXX                                 ",
-        "      XXXX            XXXXXX                                                          ",
-        "                            XXXXX                                 XXXXXXXXXXXXX ",
-        "  XXXXXX         XXXX                           XXXXX                           ",
-        "XXXXXXXXXXXXXXXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-        "XXXXXXXXXXXXXXXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+        "                                                                                ",
+        "                                                                                ",
+        "                                                                                ",
+        "                                                                                ",
+        "                                                                                ",
+        "                                                                                ",
+        "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+        "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     ]
 
     platforms = []
@@ -123,10 +124,15 @@ def main():
     player.hotbar.add_item(knife_item, 1)  # Add knife to slot 2
     player.hotbar.select_slot(0)  # Start with bow selected
     
-    # Create test enemy
-    enemy = Enemy(400, 8 * TILE_SIZE - PLAYER_HEIGHT, player_img)  # Use same image as player
+    # Create particle system
+    particle_system = ParticleSystem()
     
-    print("Bow, Player, Hotbar, and Enemy created.")
+    # Create test enemy (no bow needed)
+    enemy = Enemy(400, 8 * TILE_SIZE - PLAYER_HEIGHT, player_img)
+    enemy.particle_system = particle_system  # Connect particle system to enemy
+    player.enemy_target = enemy  # Give player reference to enemy for aimbot assist
+    
+    print("Bow, Player, Hotbar, Enemy, and ParticleSystem created.")
     
     camera = Camera(SCREEN_WIDTH, SCREEN_HEIGHT)
     print("Camera created.")
@@ -148,6 +154,13 @@ def main():
                     jump_pressed = True
                 if event.key == K_SPACE:
                     dash_pressed = True
+                # Health testing keys
+                if event.key == K_h:  # H key to take normal damage
+                    player.take_damage(10)
+                if event.key == K_v:  # V key for void damage
+                    player.take_damage(100, is_void=True)
+                if event.key == K_g:  # G key to heal
+                    player.heal(20)
             if event.type == KEYUP:
                 if event.key == K_UP or event.key == K_w:
                     jump_key_released = True
@@ -164,11 +177,28 @@ def main():
         mouse_pos = pygame.mouse.get_pos()
         keys_pressed = pygame.key.get_pressed()
         player.update(platforms, jump_pressed, left_click, camera, jump_key_released, right_click, keys_pressed, mouse_pos, dash_pressed)
-        enemy.update(platforms, player.rect)  # Update enemy AI
+        enemy.update(platforms, player)  # Update enemy AI with full player object
+        particle_system.update()  # Update particles
         
         # Check collisions
         player.check_enemy_collision(enemy)
         player.check_arrow_hits(enemy)
+        
+        # Check if enemy cross attack hits player when cross is small
+        if enemy.check_circle_hit(player.rect):
+            player.take_damage(20)  # Clear damage indication (20 out of 100 HP)
+            print(f"Enemy cross hit! Player health: {player.health_tank.current_health}")  # Debug
+        
+        # Check if particles hit player
+        particle_damage = particle_system.check_player_collisions(player.rect)
+        if particle_damage > 0:
+            player.take_damage(particle_damage)
+            print(f"Particle hit! Damage: {particle_damage}, Player health: {player.health_tank.current_health}")
+        
+        # Check if lightning strike hits player
+        if enemy.check_lightning_hit(player.rect):
+            player.take_damage(25)  # Lightning damage
+            print(f"Lightning strike hit! Player health: {player.health_tank.current_health}")
         
         # Only check knife hits when knife is equipped
         if player.current_weapon == player.knife:
@@ -178,12 +208,26 @@ def main():
         camera.update(player.rect, mouse_pos)
 
         screen.fill(SKY_BLUE)
+        
+        # Add bullet time visual effects during flurry rush
+        if player.flurry_rush_active:
+            # Create bullet time tint overlay
+            bullet_time_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            bullet_time_surface.set_alpha(50)
+            bullet_time_surface.fill((150, 150, 255))  # Blue tint
+            screen.blit(bullet_time_surface, (0, 0))
+        
         for platform in platforms:
             screen.blit(dirt_img, camera.apply(platform))
         
         player.draw(screen, camera)
 
         enemy.draw(screen, camera)  # Draw enemy
+        particle_system.draw(screen, camera)  # Draw particles
+        
+        # Draw boss health bar (not affected by camera)
+        enemy.draw_boss_health_bar(screen, SCREEN_WIDTH, SCREEN_HEIGHT)
+        
         player.draw_hotbar(screen)  # Draw hotbar UI
         
         pygame.display.flip()

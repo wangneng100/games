@@ -66,8 +66,8 @@ class Bow:
         dy = world_mouse_y - player_rect.centery
         self.angle = math.atan2(dy, dx)
         
-    def shoot_arrow(self):
-        """Create and return a new arrow with current charge power"""
+    def shoot_arrow(self, enemy=None):
+        """Create and return a new arrow with current charge power and slight aimbot assist"""
         if not self.player_rect:
             return None
             
@@ -77,7 +77,28 @@ class Bow:
         arrow_x = self.player_rect.centerx + math.cos(self.angle) * character_radius
         arrow_y = self.player_rect.centery + math.sin(self.angle) * character_radius
         
-        return Arrow(arrow_x, arrow_y, self.angle, self.arrow_image, self.charge_power)
+        # Apply slight aimbot assist if enemy is provided
+        final_angle = self.angle
+        if enemy and hasattr(enemy, 'rect'):
+            # Calculate angle to enemy
+            dx = enemy.rect.centerx - arrow_x
+            dy = enemy.rect.centery - arrow_y
+            angle_to_enemy = math.atan2(dy, dx)
+            
+            # Calculate angle difference
+            angle_diff = angle_to_enemy - self.angle
+            # Normalize angle difference to [-pi, pi]
+            while angle_diff > math.pi:
+                angle_diff -= 2 * math.pi
+            while angle_diff < -math.pi:
+                angle_diff += 2 * math.pi
+            
+            # Apply small correction (max 15 degrees = ~0.26 radians)
+            max_assist = math.radians(15)  # 15 degree max assist
+            assist_amount = max(-max_assist, min(max_assist, angle_diff * 0.3))  # 30% of the angle diff, capped
+            final_angle = self.angle + assist_amount
+        
+        return Arrow(arrow_x, arrow_y, final_angle, self.arrow_image, self.charge_power)
         
     def reset(self):
         """Reset bow state"""
