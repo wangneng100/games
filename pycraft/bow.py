@@ -56,15 +56,19 @@ class Bow:
         # Get mouse position
         mouse_pos = pygame.mouse.get_pos()
         
-        # Get world mouse position (accounting for camera)
-        # Convert screen coordinates to world coordinates
-        world_mouse_x = mouse_pos[0] - camera.camera.left
-        world_mouse_y = mouse_pos[1] - camera.camera.top
+        # Get world mouse position (accounting for camera transform)
+        # Convert screen mouse coordinates to world coordinates
+        world_mouse_x = mouse_pos[0] - camera.camera.x
+        world_mouse_y = mouse_pos[1] - camera.camera.y
         
-        # Calculate angle from player to mouse
+        # Calculate angle from player center to mouse in world coordinates
         dx = world_mouse_x - player_rect.centerx
         dy = world_mouse_y - player_rect.centery
-        self.angle = math.atan2(dy, dx)
+        
+        # Always update angle for accurate aiming (especially vertical)
+        # Only skip if mouse is exactly on player (prevents division by zero)
+        if abs(dx) > 0.1 or abs(dy) > 0.1:
+            self.angle = math.atan2(dy, dx)
         
     def shoot_arrow(self, enemy=None):
         """Create and return a new arrow with current charge power and slight aimbot assist"""
@@ -137,7 +141,7 @@ class Bow:
         rotated_bow = pygame.transform.rotate(image_to_rotate, -angle_degrees - 90 + rotation_offset)
         bow_rect = rotated_bow.get_rect(center=screen_pos)
         
-        # Draw the bow
+        # Draw bow normally without brightness overlay
         screen.blit(rotated_bow, bow_rect)
         
         # Draw arrow if charging
@@ -172,5 +176,5 @@ class Bow:
         rotated_arrow = pygame.transform.rotate(self.bow_arrow_image, -angle_degrees)  # Match bow direction exactly
         arrow_rect = rotated_arrow.get_rect(center=screen_arrow_pos)
         
-        # Draw the arrow
+        # Draw charged arrow normally without brightness overlay
         screen.blit(rotated_arrow, arrow_rect)

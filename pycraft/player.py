@@ -21,6 +21,11 @@ class Player:
         # Initialize arrow list for tracking
         self.arrows = []
         
+        # ENHANCED MOTION BLUR SYSTEM for player (walking + dashing)
+        self.motion_blur_copies = []  # List to store multiple player positions
+        self.max_blur_copies = 120  # Optimized for walking + dashing blur
+        self.blur_alpha_decay = 0.88  # Faster fade for cleaner trails
+        
         # Initialize health bar
         from health_bar import HealthBar
         self.health_bar = HealthBar(max_health=1000)  # 10x more HP
@@ -66,6 +71,16 @@ class Player:
         self.is_knocked_back = False
         self.initial_knockback_x = 0
         self.initial_knockback_y = 0
+        
+        # Mana system for special abilities
+        self.mana = 0  # Current mana (0-20)
+        self.max_mana = 20  # Maximum mana
+        self.mana_bar_alpha = 255  # For golden glow effect
+        
+        # Special ability system
+        self.is_special_ability_active = False
+        self.special_ability_timer = 0
+        self.special_arrow_cooldown = 0
 
     def reset(self):
         self.rect.topleft = (self.spawn_x, self.spawn_y)
@@ -86,7 +101,6 @@ class Player:
         self.dash_cooldown_start = 0
         self.dash_trail.clear()
         self.dash_speed = 0
-        self.dash_roll_angle = 0
         
         # Reset health tank
         self.health_bar.reset()
@@ -119,6 +133,10 @@ class Player:
         else:
             self.current_weapon = None
             
+        # --- Handle special ability activation ---
+        if keys_pressed and keys_pressed[pygame.K_s] and self.mana >= 20 and not self.is_special_ability_active:
+            self.activate_special_ability()
+        
         # --- Handle dash input ---
         if dash_pressed and not self.is_dashing:
             # Check if dash is off cooldown
@@ -137,6 +155,17 @@ class Player:
         
         # Only handle bow mechanics when bow is equipped
         if self.current_weapon == self.bow:
+            # Special ability rapid fire
+            if self.is_special_ability_active:
+                self.special_arrow_cooldown -= 1/60  # Assuming 60 FPS
+                if self.special_arrow_cooldown <= 0:
+                    arrow = self.bow.shoot_arrow(self.enemy_target)  # Pass enemy for aimbot assist
+                    if arrow:
+                        arrow.particle_system = self.particle_system
+                        self.arrows.append(arrow)
+                    self.special_arrow_cooldown = 0.1  # Shoot every 0.1 seconds (10 arrows/sec)
+            
+            # Normal bow mechanics
             if right_click and not self.right_click_held:
                 # Just started holding right click
                 self.right_click_held = True
@@ -302,6 +331,53 @@ class Player:
         # Update health tank
         self.health_bar.update()
         
+        # SUPER MOTION BLUR UPDATE - Add current position to blur trail
+        total_velocity = abs(self.vel_x) + abs(self.vel_y)
+        if total_velocity > 0.5:  # Only add blur when moving
+            # Dynamic blur count based on speed (faster = MORE BLUR)
+            speed_multiplier = min(total_velocity / 5.0, 3.0)  # Cap at 3x multiplier
+            dynamic_max_copies = int(self.max_blur_copies * speed_multiplier)
+            dynamic_max_copies = max(20, dynamic_max_copies)  # Minimum 20 copies
+            
+            # Add current position to blur trail
+            if len(self.motion_blur_copies) >= dynamic_max_copies:
+                self.motion_blur_copies.pop(0)  # Remove oldest copy
+            
+            # CREATE MOTION BLUR - strong for dashing, weak for walking
+            player_speed = math.sqrt(self.vel_x**2 + self.vel_y**2)
+            if self.is_dashing:
+                # Strong blur when dashing
+                alpha = 70  # Strong dash blur
+                self.motion_blur_copies.append({
+                    'x': self.rect.centerx,
+                    'y': self.rect.centery,
+                    'angle': self.angle,
+                    'alpha': alpha,
+                    'image': self.image.copy()
+                })
+            elif player_speed > 1.0:  # Walking/moving blur
+                # Weak blur for normal movement
+                alpha = 25  # Much weaker walking blur
+                self.motion_blur_copies.append({
+                    'x': self.rect.centerx,
+                    'y': self.rect.centery,
+                    'angle': self.angle,
+                    'alpha': alpha,
+                    'image': self.image.copy()
+                })
+        
+        # Fade existing blur copies (adjusted for lighter background)
+        for i in range(len(self.motion_blur_copies) - 1, -1, -1):
+            self.motion_blur_copies[i]['alpha'] *= self.blur_alpha_decay
+            if self.motion_blur_copies[i]['alpha'] < 8:  # Remove very faded copies
+                self.motion_blur_copies.pop(i)
+        
+        # Update special ability
+        if self.is_special_ability_active:
+            self.special_ability_timer -= 1/60  # Assuming 60 FPS
+            if self.special_ability_timer <= 0:
+                self.is_special_ability_active = False
+        
         # Continuous death check
         if self.health_bar.current_health <= 0:
             self.reset()
@@ -343,11 +419,38 @@ class Player:
         self.dash_trail.clear()  # Clear previous trail
         self.dash_speed = DASH_INITIAL_SPEED  # Set initial dash speed
         self.dash_roll_angle = 0  # Reset roll angle
-
-
+    
+    def activate_special_ability(self):
+        """Activate special ability: launch into air and rapid fire for 5 seconds"""
+        # Use all mana
+        self.mana = 0
+        self.mana_bar_alpha = 255  # Reset glow
+        
+        # Launch player into the air
+        self.vel_y = -25  # Strong upward velocity
+        self.on_ground = False
+        
+        # Activate rapid fire mode
+        self.is_special_ability_active = True
+        self.special_ability_timer = 5.0  # 5 seconds
+        self.special_arrow_cooldown = 0  # Reset arrow cooldown
 
     def draw(self, screen, camera):
-        """Draws the player on the screen."""
+        """Draws the player on the screen with SUPER MOTION BLUR."""
+        
+        # DRAW MOTION BLUR COPIES FIRST (behind main player)
+        for copy in self.motion_blur_copies:
+            if copy['alpha'] > 10:  # Only draw visible copies
+                # Rotate the blur copy
+                blur_rotated = pygame.transform.rotate(copy['image'], copy['angle'])
+                blur_rect = blur_rotated.get_rect(center=(copy['x'], copy['y']))
+                
+                # Apply alpha transparency for blur effect
+                blur_surface = blur_rotated.copy()
+                blur_surface.set_alpha(int(copy['alpha']))
+                
+                # Draw the blur copy
+                screen.blit(blur_surface, camera.apply(blur_rect))
 
         # Apply roll animation during dash
         player_angle = self.angle
@@ -369,6 +472,7 @@ class Player:
             
             screen.blit(flashed_image, camera.apply(new_rect))
         else:
+            # Draw player normally without any brightness overlay
             screen.blit(rotated_image, camera.apply(new_rect))
         
         # Draw current equipped weapon
@@ -414,18 +518,32 @@ class Player:
 
                 
     def check_enemy_collision(self, enemy):
-        """No collision effects - player and enemy can overlap freely"""
-        # Player can move through enemy completely
-        # No pushing, no stopping, no collision effects at all
-
-        pass
+        """INSANE MODE: Boss damages player on contact!"""
+        if self.rect.colliderect(enemy.rect):
+            # INSANE MODE: Boss deals contact damage to player!
+            if not hasattr(self, 'last_contact_damage_time'):
+                self.last_contact_damage_time = 0
+            
+            current_time = time.time()
+            if current_time - self.last_contact_damage_time > 0.5:  # Contact damage every 0.5 seconds
+                contact_damage = 15  # Boss deals damage on touch
+                self.take_damage(contact_damage)
+                self.last_contact_damage_time = current_time
+                print(f"Boss contact damage! Player took {contact_damage} damage!")
+                
+                # Push player away from boss
+                dx = self.rect.centerx - enemy.rect.centerx
+                dy = self.rect.centery - enemy.rect.centery
+                if dx != 0 and dy != 0:
+                    self.vel_x += dx * 0.3
+                    self.vel_y += dy * 0.2
 
                 
     def check_arrow_hits(self, enemy):
         """Check if arrows hit the enemy with smaller hitbox"""
         for arrow in self.arrows[:]:
             if arrow.alive:
-                # Create smaller hitbox for arrow
+                # Create center-based hitbox for arrow
                 arrow_hitbox = pygame.Rect(
                     arrow.rect.centerx - ARROW_HITBOX_SIZE//2,
                     arrow.rect.centery - ARROW_HITBOX_SIZE//2,
@@ -452,8 +570,16 @@ class Player:
                     dx = math.cos(arrow.angle) * force
                     dy = math.sin(arrow.angle) * force * 0.2  # Less vertical knockback
                     
-                    # Apply knockback to enemy (works even if already knocked back)
-                    enemy.apply_knockback(dx, dy, 0.8)
+                    # INSANE MODE: No stuns, boss is relentless!
+                    # Boss takes damage but never stops attacking
+                    if hasattr(enemy, 'is_jumping') and enemy.is_jumping:
+                        # Boss takes extra damage during spin but doesn't stop!
+                        print("Hit boss during death spin - extra damage but boss continues!")
+                        # Apply stronger knockback but boss keeps attacking
+                        enemy.apply_knockback(dx * 1.5, dy * 1.5, 0.3)  # Stronger but shorter knockback
+                    else:
+                        # Apply normal knockback to enemy
+                        enemy.apply_knockback(dx, dy, 0.5)  # Shorter knockback
                     
                     # Damage enemy based on arrow charge power (100x weaker than original)
                     base_damage = 0.15  # Base damage (was 1.5, originally 15)
@@ -461,8 +587,10 @@ class Player:
                     total_damage = base_damage + charge_bonus  # 0.15-0.5 total damage (was 1.5-5, originally 15-50)
                     enemy.take_damage(total_damage)
                     
-                    # No lifesteal - removed for balance
-                    print(f"Arrow hit! Enemy damaged.")
+                    # GAIN MANA on hit!
+                    if self.mana < self.max_mana:
+                        self.mana += 1
+                        print(f"Arrow hit! Enemy damaged. Mana: {self.mana}/{self.max_mana}")
                     
                     # Remove arrow
                     arrow.alive = False
@@ -489,5 +617,33 @@ class Player:
         self.health_bar.heal(amount)
     
     def draw_hotbar(self, screen):
-        """Draw the hotbar UI"""
+        """Draw the hotbar and mana bar UI"""
         self.hotbar.draw(screen)
+        
+        # Draw mana bar
+        mana_bar_x = 20
+        mana_bar_y = 120  # Below health bar
+        mana_bar_width = 160
+        mana_bar_height = 15
+        
+        # Background
+        pygame.draw.rect(screen, (40, 40, 40), (mana_bar_x - 2, mana_bar_y - 2, mana_bar_width + 4, mana_bar_height + 4))
+        pygame.draw.rect(screen, (60, 60, 60), (mana_bar_x, mana_bar_y, mana_bar_width, mana_bar_height))
+        
+        # Mana fill
+        mana_ratio = self.mana / self.max_mana
+        mana_fill_width = int(mana_bar_width * mana_ratio)
+        if self.mana >= self.max_mana:
+            # Full mana - golden glow
+            pygame.draw.rect(screen, (255, 215, 0), (mana_bar_x, mana_bar_y, mana_fill_width, mana_bar_height))
+        else:
+            # Building mana - blue
+            pygame.draw.rect(screen, (100, 150, 255), (mana_bar_x, mana_bar_y, mana_fill_width, mana_bar_height))
+        
+        # Mana text
+        font = pygame.font.Font(None, 24)
+        mana_text = f"MANA: {self.mana}/{self.max_mana}"
+        if self.mana >= self.max_mana:
+            mana_text += " - PRESS S FOR SPECIAL!"
+        text_surface = font.render(mana_text, True, (255, 255, 255))
+        screen.blit(text_surface, (mana_bar_x, mana_bar_y + mana_bar_height + 5))

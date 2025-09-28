@@ -85,9 +85,9 @@ BASE_KNOCKBACK_FORCE = 4  # Base knockback force
 KNOCKBACK_DECELERATION = 0.88  # More realistic knockback slowdown
 KNOCKBACK_MIN_DURATION = 0.1  # Minimum knockback time
 KNOCKBACK_MAX_DURATION = 0.5  # Maximum knockback time
-ARROW_HITBOX_SIZE = 8  # Smaller hitbox for arrows  
+ARROW_HITBOX_SIZE = 16  # Better hitbox for arrows (doubled)  
 ARROW_KNOCKBACK_MULTIPLIER = 1.2  # More realistic arrow knockback
-ARROW_PIERCE_COUNT = 1  # Number of blocks arrows can pierce through
+ARROW_PIERCE_COUNT = 3  # Number of blocks arrows can pierce through (increased!)
 
 # Hit effect settings
 HIT_FLASH_DURATION = 0.15  # How long the red flash lasts
